@@ -135,6 +135,10 @@ body {
   margin-top: 14px;
 }
 
+.custom-delimiter-grid[hidden] {
+  display: none;
+}
+
 .field {
   display: grid;
   gap: 6px;
