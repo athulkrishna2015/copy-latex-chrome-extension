@@ -15,7 +15,11 @@ injectMathJaxPageScript();
 
 // Listen for LaTeX messages from the page script
 let lastMathJaxV3Latex = null;
-let currentSettings = CopyLatexSettings.merge();
+let currentSettings = {
+  ...CopyLatexSettings.merge(),
+  enableFloatingButton: false
+};
+let settingsVersion = 0;
 const settingsReady = loadCurrentSettings();
 
 function rememberMathJaxLatex(latex, mjxId) {
@@ -33,8 +37,17 @@ function rememberMathJaxLatex(latex, mjxId) {
 }
 
 async function loadCurrentSettings() {
+  const requestVersion = settingsVersion;
   const stored = await chrome.storage.local.get(CopyLatexSettings.storageKeys);
+
+  if (requestVersion !== settingsVersion) {
+    return currentSettings;
+  }
+
   currentSettings = CopyLatexSettings.merge(stored);
+  if (!currentSettings.enableFloatingButton) {
+    clearCurrentTarget();
+  }
   return currentSettings;
 }
 
@@ -77,6 +90,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     return;
   }
 
+  settingsVersion += 1;
   currentSettings = CopyLatexSettings.merge(nextSettings);
   if (!currentSettings.enableFloatingButton) {
     clearCurrentTarget();
