@@ -8,9 +8,10 @@ A Chrome and Firefox extension that lets you quickly copy LaTeX code (KaTeX or M
 - Added a popup settings panel for copy behavior and output format.
 - Added selection copy modes for Markdown or rich text (HTML) with LaTeX substitutions.
 - Added inline and display delimiter switching, including custom delimiter pairs.
-- Added options to disable the floating copy button, hijack normal copy when math is selected, and enable an extension copy shortcut.
+- Added options to disable the floating click-to-copy button, hijack normal copy when math is selected, and enable an extension copy shortcut.
 - Improved MathJax v3/v4 selection copy so untouched formulas can still be copied as LaTeX.
 - Improved single-formula copy so delimiter settings apply there too.
+- The floating copy button remains a single toggle that controls both the hover overlay and formula click-to-copy behavior.
 
 ### Previous release notes
 - v1.5: Typst support.
@@ -93,8 +94,8 @@ This is done in `chrome://extensions` in the extension 'Details'.
    - **For Wikipedia**
      - Extracts LaTeX from `alt` attributes of images.
    - **For all of them** 
-   - Shows an overlay when hovering over the equation.
-   - Allows clicking to copy the code to clipboard using `navigator.clipboard.writeText()`.
+   - Shows an overlay when hovering over the equation, when the floating copy button setting is enabled.
+   - Allows clicking formulas to copy the code to clipboard using `navigator.clipboard.writeText()`. This behavior uses the same floating copy button toggle.
    - Uses an inline `<svg>` to avoid external file dependencies.
 
 2. **CSS (`overlay.css`)**:

@@ -357,7 +357,11 @@ async function copyLatex(tex, options = {}) {
     if (!result?.ok) {
       throw new Error(result?.error || 'Clipboard copy failed');
     }
-    
+
+    if (!overlay) {
+      createOverlay();
+    }
+
     // Show success feedback
     overlay.classList.add('copied');
     const span = overlay.querySelector('span');
