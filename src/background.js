@@ -1,98 +1,89 @@
-// Background script (service worker) for context menu
+import './settings.js';
 
-// Update context menu title based on user preference
-async function updateContextMenuTitle() {
-  const result = await chrome.storage.local.get('outputFormat');
-  const format = result.outputFormat || 'latex';
-  
-  const title = format === 'typst' 
-    ? 'Copy as Typst' 
-    : 'Copy as Markdown (with LaTeX)';
-  
-  await chrome.contextMenus.update('copy-selection-as-markdown', { title });
+const MENU_ID = 'copy-selection-with-addon';
+const COMMAND_ID = 'copy-selection-with-addon';
+let menuRefresh = Promise.resolve();
+
+async function getStoredSettings() {
+  const stored = await chrome.storage.local.get(CopyLatexSettings.storageKeys);
+  return CopyLatexSettings.merge(stored);
 }
 
-// Create context menu on installation
-chrome.runtime.onInstalled.addListener(async () => {
-  const result = await chrome.storage.local.get('outputFormat');
-  const format = result.outputFormat || 'latex';
-  
-  const title = format === 'typst' 
-    ? 'Copy as Typst' 
-    : 'Copy as Markdown (with LaTeX)';
-  
+async function ensureContextMenu() {
+  const settings = await getStoredSettings();
+
+  await chrome.contextMenus.removeAll();
   chrome.contextMenus.create({
-    id: 'copy-selection-as-markdown',
-    title: title,
+    id: MENU_ID,
+    title: CopyLatexSettings.getSelectionMenuTitle(settings),
     contexts: ['selection']
   });
-  // console.log('[Copy LaTeX] Context menu created');
+}
+
+function scheduleContextMenuRefresh() {
+  menuRefresh = menuRefresh
+    .catch(() => {})
+    .then(() => ensureContextMenu());
+  return menuRefresh;
+}
+
+async function requestSelectionCopy(tabId) {
+  try {
+    const response = await chrome.tabs.sendMessage(tabId, {
+      type: 'copy-selection-with-addon'
+    });
+
+    if (!response?.ok) {
+      console.error('[Copy LaTeX] Copy failed:', response?.error || 'Unknown error');
+    }
+  } catch (error) {
+    console.error('[Copy LaTeX] Failed to message content script:', error);
+  }
+}
+
+chrome.runtime.onInstalled.addListener(async () => {
+  await scheduleContextMenuRefresh();
 });
 
-// Listen for storage changes to update context menu title
+chrome.runtime.onStartup.addListener(async () => {
+  await scheduleContextMenuRefresh();
+});
+
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === 'local' && changes.outputFormat) {
-    updateContextMenuTitle();
+  if (areaName !== 'local') {
+    return;
+  }
+
+  const changedKeys = Object.keys(changes);
+  if (changedKeys.some((key) => CopyLatexSettings.storageKeys.includes(key))) {
+    scheduleContextMenuRefresh();
   }
 });
 
-// Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === 'copy-selection-as-markdown' && tab?.id) {
-    // console.log('[Copy LaTeX] Context menu clicked, tab ID:', tab.id);
+  if (info.menuItemId !== MENU_ID || !tab?.id) {
+    return;
+  }
 
-    try {
-      // Execute script to get the selection HTML
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => {
-          // This function runs in the content script context
-          const selection = window.getSelection();
-          if (!selection || selection.rangeCount === 0) {
-            return { ok: false, error: 'No selection' };
-          }
+  await requestSelectionCopy(tab.id);
+});
 
-          const container = document.createElement('div');
-          for (let i = 0; i < selection.rangeCount; i++) {
-            container.appendChild(selection.getRangeAt(i).cloneContents());
-          }
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command !== COMMAND_ID) {
+    return;
+  }
 
-          const html = container.innerHTML;
-          // console.log('[Copy LaTeX] Selection HTML:', html.substring(0, 200));
+  const settings = await getStoredSettings();
+  if (!settings.enableCustomCopyShortcut) {
+    return;
+  }
 
-          // Return HTML to background script
-          return { ok: true, html, text: selection.toString() };
-        }
-      });
+  const [tab] = await chrome.tabs.query({
+    active: true,
+    currentWindow: true
+  });
 
-      // console.log('[Copy LaTeX] executeScript result:', results);
-
-      if (results && results[0] && results[0].result) {
-        const result = results[0].result;
-
-        if (result.ok && result.html) {
-          // console.log('[Copy LaTeX] Got selection HTML, length:', result.html.length);
-
-          // Send message to content script to convert HTML to Markdown
-          const response = await chrome.tabs.sendMessage(tab.id, {
-            type: 'convertHtmlToMarkdown',
-            html: result.html
-          });
-
-          // console.log('[Copy LaTeX] Markdown conversion response:', response);
-
-          if (response && response.ok) {
-            console.log('[Copy LaTeX] Copy successful');
-          } else {
-            console.error('[Copy LaTeX] Copy failed:', response?.error);
-          }
-        } else {
-          console.error('[Copy LaTeX] No selection or error:', result.error);
-        }
-      }
-    } catch (error) {
-      console.error('[Copy LaTeX] Error:', error);
-      console.error('[Copy LaTeX] Error details:', JSON.stringify(error, null, 2));
-    }
+  if (tab?.id) {
+    await requestSelectionCopy(tab.id);
   }
 });

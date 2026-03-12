@@ -1,10 +1,18 @@
 {
   "manifest_version": 3,
   "name": "Copy LaTeX (KaTeX & MathJax & Wikipedia Images)",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Hover and click to copy LaTeX expressions on ChatGPT, DeepSeek, Wikipedia, Stack Exchange and other math-related websites.",
   "icons": { "48": "icons/icon48.png" },
   "permissions": ["contextMenus", "scripting", "activeTab", "storage"],
+  "commands": {
+    "copy-selection-with-addon": {
+      "suggested_key": {
+        "default": "Alt+Shift+C"
+      },
+      "description": "Copy the current selection with Copy LaTeX"
+    }
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -20,6 +28,7 @@
     {
       "matches": ["<all_urls>"],
       "js": [
+        "settings.js",
         "content.js",
         "lib/html2markdown/selection-to-markdown.js",
         "lib/html2markdown/turndown/turndown.js",

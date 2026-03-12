@@ -15,10 +15,71 @@ injectMathJaxPageScript();
 
 // Listen for LaTeX messages from the page script
 let lastMathJaxV3Latex = null;
+let currentSettings = CopyLatexSettings.merge();
+const settingsReady = loadCurrentSettings();
+
+function rememberMathJaxLatex(latex, mjxId) {
+  lastMathJaxV3Latex = latex;
+  window.__lastMathJaxV3Latex = latex;
+
+  if (!mjxId) {
+    return;
+  }
+
+  const mjxContainer = document.querySelector(`mjx-container[ctxtmenu_counter="${mjxId}"]`);
+  if (mjxContainer) {
+    mjxContainer.setAttribute('data-copylatex-latex', latex);
+  }
+}
+
+async function loadCurrentSettings() {
+  const stored = await chrome.storage.local.get(CopyLatexSettings.storageKeys);
+  currentSettings = CopyLatexSettings.merge(stored);
+  return currentSettings;
+}
+
+async function getCurrentSettings() {
+  await settingsReady;
+  return currentSettings;
+}
+
+function clearCurrentTarget() {
+  if (currentTarget) {
+    currentTarget.classList.remove('hoverlatex-hover');
+    currentTarget = null;
+  }
+  hideOverlay();
+}
+
 window.addEventListener('message', function(event) {
   if (event.source !== window) return;
   if (event.data && event.data.type === 'CopyLaTeX_MathJaxV3') {
-    lastMathJaxV3Latex = event.data.latex;
+    rememberMathJaxLatex(event.data.latex, event.data.mjxId);
+  }
+});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'local') {
+    return;
+  }
+
+  const nextSettings = { ...currentSettings };
+  let hasRelevantChange = false;
+
+  CopyLatexSettings.storageKeys.forEach((key) => {
+    if (changes[key]) {
+      nextSettings[key] = changes[key].newValue;
+      hasRelevantChange = true;
+    }
+  });
+
+  if (!hasRelevantChange) {
+    return;
+  }
+
+  currentSettings = CopyLatexSettings.merge(nextSettings);
+  if (!currentSettings.enableFloatingButton) {
+    clearCurrentTarget();
   }
 });
 
@@ -27,6 +88,20 @@ let currentTarget = null;
 
 const copy_svg = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4 a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
 const check_svg = '<svg class="check-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 -1 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 5 9 17l-5-5"/></svg>';
+const selectionMathSelector = [
+  '.katex',
+  '[data-math]',
+  'mjx-container',
+  '.MathJax_Display',
+  '.MJXc-display',
+  '.MathJax',
+  '.mjx-chtml',
+  '.MathJax_CHTML',
+  '.MathJax_MathML',
+  'img.mwe-math',
+  'img.mwe-math-fallback-image-inline',
+  'img.mwe-math-fallback-image-display'
+].join(', ');
 
 function createSvgFromString(svgString) {
   // Use DOMParser to safely parse SVG strings without innerHTML security warnings
@@ -70,6 +145,11 @@ function findMathJaxV3Tex(el) {
     return null;
   }
 
+  const remembered = mjxContainer.getAttribute('data-copylatex-latex');
+  if (remembered && remembered.trim()) {
+    return remembered.trim();
+  }
+
   // Use the last received LaTeX from the page script
   if (lastMathJaxV3Latex) {
     return lastMathJaxV3Latex;
@@ -111,6 +191,11 @@ function findAnnotationTex(el) {
 }
 
 function findMathJaxTex(el) {
+  const remembered = el.getAttribute('data-copylatex-latex');
+  if (remembered && remembered.trim()) {
+    return remembered.trim();
+  }
+
   // Check for MathJax display equations
   const mathJaxDisplay = el.closest('.MathJax_Display, .MJXc-display');
   if (mathJaxDisplay) {
@@ -205,18 +290,59 @@ function latexToTypst(latex) {
   }
 }
 
+function isDisplayMathTarget(target) {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  if (target.classList.contains('mwe-math-fallback-image-display')) {
+    return true;
+  }
+
+  if (target.classList.contains('MathJax_Display') || target.classList.contains('MJXc-display')) {
+    return true;
+  }
+
+  if (target.tagName === 'MJX-CONTAINER' && target.hasAttribute('display')) {
+    return true;
+  }
+
+  if (target.classList.contains('katex')) {
+    return target.parentElement?.classList.contains('katex-display') || false;
+  }
+
+  if (target.hasAttribute('data-math')) {
+    return target.tagName === 'DIV';
+  }
+
+  return false;
+}
+
+function applySingleFormulaDelimiters(tex, settings, isDisplay) {
+  if (settings.outputFormat !== 'latex') {
+    return tex;
+  }
+
+  const delimiters = CopyLatexSettings.resolveDelimiterPair(settings, isDisplay);
+  return `${delimiters.start}${tex}${delimiters.end}`;
+}
+
 // Copy LaTeX or Typst code based on user preference
-async function copyLatex(tex) {
+async function copyLatex(tex, options = {}) {
   try {
-    // Get user's format preference
-    const result = await chrome.storage.local.get('outputFormat');
-    const format = result.outputFormat || 'latex';
-    
-    // Convert to Typst if selected
-    const outputText = format === 'typst' ? latexToTypst(tex) : tex;
-    
-    // Copy to clipboard
-    await navigator.clipboard.writeText(outputText);
+    const settings = await getCurrentSettings();
+    const format = settings.outputFormat;
+    const outputText = format === 'typst'
+      ? latexToTypst(tex)
+      : applySingleFormulaDelimiters(tex, settings, !!options.isDisplay);
+
+    const result = typeof copyTextToClipboard === 'function'
+      ? await copyTextToClipboard(outputText)
+      : await navigator.clipboard.writeText(outputText).then(() => ({ ok: true }));
+
+    if (!result?.ok) {
+      throw new Error(result?.error || 'Clipboard copy failed');
+    }
     
     // Show success feedback
     overlay.classList.add('copied');
@@ -233,6 +359,10 @@ async function copyLatex(tex) {
 }
 
 document.addEventListener('mouseover', (e) => {
+  if (!currentSettings.enableFloatingButton) {
+    return;
+  }
+
   // Check for Wikipedia math images first (only on Wikipedia/Wikiwand sites)
   if (isWikipedia()) {
     const wikipediaTex = findWikipediaTex(e.target);
@@ -273,6 +403,7 @@ document.addEventListener('mouseover', (e) => {
   if (mjxContainer) {
     const tex = findMathJaxV3Tex(mjxContainer);
     if (tex) {
+      mjxContainer.setAttribute('data-copylatex-latex', tex);
       currentTarget = mjxContainer;
       mjxContainer.classList.add('hoverlatex-hover');
       showOverlay(mjxContainer, tex);
@@ -307,18 +438,20 @@ document.addEventListener('mouseout', (e) => {
         (e.relatedTarget?.classList.contains('mwe-math') || 
         e.relatedTarget?.classList.contains('mwe-math-fallback-image-inline') ||
         e.relatedTarget?.classList.contains('mwe-math-fallback-image-display')))) {
-    currentTarget.classList.remove('hoverlatex-hover');
-    hideOverlay();
-    currentTarget = null;
+    clearCurrentTarget();
   }
 });
 
 document.addEventListener('click', (e) => {
+  if (!currentSettings.enableFloatingButton) {
+    return;
+  }
+
   // Check for Wikipedia math images first (only on Wikipedia/Wikiwand sites)
   if (isWikipedia()) {
     const wikipediaTex = findWikipediaTex(e.target);
     if (wikipediaTex) {
-      copyLatex(wikipediaTex);
+      copyLatex(wikipediaTex, { isDisplay: isDisplayMathTarget(e.target) });
       return;
     }
   }
@@ -328,7 +461,7 @@ document.addEventListener('click', (e) => {
   if (katex) {
     const tex = findAnnotationTex(katex);
     if (tex) {
-      copyLatex(tex);
+      copyLatex(tex, { isDisplay: isDisplayMathTarget(katex) });
       return;
     }
   }
@@ -338,7 +471,7 @@ document.addEventListener('click', (e) => {
   if (dataMathEl) {
     const tex = dataMathEl.getAttribute('data-math');
     if (tex) {
-      copyLatex(tex);
+      copyLatex(tex, { isDisplay: isDisplayMathTarget(dataMathEl) });
       return;
     }
   }
@@ -348,7 +481,8 @@ document.addEventListener('click', (e) => {
   if (mjxContainer) {
     const tex = findMathJaxV3Tex(mjxContainer);
     if (tex) {
-      copyLatex(tex);
+      mjxContainer.setAttribute('data-copylatex-latex', tex);
+      copyLatex(tex, { isDisplay: isDisplayMathTarget(mjxContainer) });
       return;
     }
   }
@@ -361,53 +495,210 @@ document.addEventListener('click', (e) => {
     const mathElement = mathJaxDisplay || mathJaxInline;
     const tex = findMathJaxTex(mathElement);
     if (tex) {
-      copyLatex(tex);
+      copyLatex(tex, { isDisplay: isDisplayMathTarget(mathElement) });
     }
   }
 });
 
 
-// NEW FEATURE!!!: Selection to Markdown with LaTeX
-// NOW ALSO WITH TYPST SUPPORT ("Copy as Typst")
+function captureSelectionHtml(selection) {
+  const container = document.createElement('div');
 
-// Listen for messages from background script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'convertHtmlToMarkdown') {
-    // console.log('[Copy LaTeX] Converting HTML to Markdown, length:', message.html?.length);
-    convertAndCopyHtml(message.html).then(async result => {
-      if (result.ok) {
-        // Check user's format preference
-        const storageResult = await chrome.storage.local.get('outputFormat');
-        const format = storageResult.outputFormat || 'latex';
-        
-        // If Typst mode, convert markdown to typst
-        if (format === 'typst') {
-          try {
-            if (!window.markdown2typst) {
-              console.error('[Copy LaTeX] markdown2typst library not loaded');
-              sendResponse({ ok: false, error: 'markdown2typst library not loaded' });
-              return;
-            }
-            
-            // Get the markdown from clipboard (we just copied it)
-            const markdown = await navigator.clipboard.readText();
-            const typst = window.markdown2typst(markdown);
-            
-            // Copy typst back to clipboard
-            await navigator.clipboard.writeText(typst);
-            console.log('[Copy LaTeX] Converted to Typst and copied');
-            sendResponse({ ok: true, format: 'typst' });
-          } catch (error) {
-            console.error('[Copy LaTeX] Typst conversion error:', error);
-            sendResponse({ ok: false, error: String(error) });
+  for (let index = 0; index < selection.rangeCount; index += 1) {
+    container.appendChild(selection.getRangeAt(index).cloneContents());
+  }
+
+  return container.innerHTML;
+}
+
+function normalizeSelectionMathElement(element) {
+  if (!(element instanceof Element)) {
+    return null;
+  }
+
+  if (element.matches('.katex')) {
+    return element;
+  }
+
+  const katex = element.closest('.katex');
+  if (katex) {
+    return katex;
+  }
+
+  if (element.matches('[data-math]')) {
+    return element;
+  }
+
+  const dataMath = element.closest('[data-math]');
+  if (dataMath) {
+    return dataMath;
+  }
+
+  if (element.matches('mjx-container')) {
+    return element;
+  }
+
+  const mjxContainer = element.closest('mjx-container');
+  if (mjxContainer) {
+    return mjxContainer;
+  }
+
+  if (element.matches('.MathJax_Display, .MJXc-display, .MathJax, .mjx-chtml, .MathJax_CHTML, .MathJax_MathML')) {
+    return element;
+  }
+
+  const mathJax = element.closest('.MathJax_Display, .MJXc-display, .MathJax, .mjx-chtml, .MathJax_CHTML, .MathJax_MathML');
+  if (mathJax) {
+    return mathJax;
+  }
+
+  if (
+    element.tagName === 'IMG'
+    && (
+      element.classList.contains('mwe-math')
+      || element.classList.contains('mwe-math-fallback-image-inline')
+      || element.classList.contains('mwe-math-fallback-image-display')
+    )
+  ) {
+    return element;
+  }
+
+  return null;
+}
+
+function getSelectedMathElements(selection) {
+  const elements = new Set();
+
+  for (let index = 0; index < selection.rangeCount; index += 1) {
+    const range = selection.getRangeAt(index);
+    const root = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+      ? range.commonAncestorContainer
+      : range.commonAncestorContainer.parentElement;
+
+    if (!(root instanceof Element)) {
+      continue;
+    }
+
+    const normalizedRoot = normalizeSelectionMathElement(root);
+    if (normalizedRoot && range.intersectsNode(normalizedRoot)) {
+      elements.add(normalizedRoot);
+    }
+
+    root.querySelectorAll(selectionMathSelector).forEach((candidate) => {
+      try {
+        if (range.intersectsNode(candidate)) {
+          const normalized = normalizeSelectionMathElement(candidate);
+          if (normalized) {
+            elements.add(normalized);
           }
-        } else {
-          sendResponse(result);
         }
-      } else {
-        sendResponse(result);
+      } catch (error) {
+        console.debug('[Copy LaTeX] Failed to inspect selected math node:', error);
       }
     });
-    return true;  // Keep channel open for async response
+  }
+
+  return [...elements];
+}
+
+function annotateLiveMathElement(element) {
+  if (!(element instanceof Element)) {
+    return;
+  }
+
+  if (element.tagName === 'MJX-CONTAINER') {
+    const latex = findMathJaxV3Tex(element);
+    if (latex) {
+      element.setAttribute('data-copylatex-latex', latex);
+    }
+    return;
+  }
+
+  if (element.matches('.MathJax_Display, .MJXc-display, .MathJax, .mjx-chtml, .MathJax_CHTML, .MathJax_MathML')) {
+    const latex = findMathJaxTex(element);
+    if (latex) {
+      element.setAttribute('data-copylatex-latex', latex);
+    }
+  }
+}
+
+function prepareSelectionForCopy(selection) {
+  const selectedMathElements = getSelectedMathElements(selection);
+  selectedMathElements.forEach((element) => {
+    annotateLiveMathElement(element);
+  });
+  return selectedMathElements.length > 0;
+}
+
+function isEditableTarget(target) {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  return !!target.closest('input, textarea, [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]');
+}
+
+function shouldHijackCopy(event) {
+  if (!currentSettings.hijackNormalCopy) {
+    return false;
+  }
+
+  if (isEditableTarget(event.target)) {
+    return false;
+  }
+
+  const activeElement = document.activeElement;
+  if (activeElement instanceof HTMLElement && (activeElement.isContentEditable || activeElement.matches('input, textarea'))) {
+    return false;
+  }
+
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || !selection.toString().trim()) {
+    return false;
+  }
+
+  return getSelectedMathElements(selection).length > 0;
+}
+
+async function copyCurrentSelection(options = {}) {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || !selection.toString().trim()) {
+    return { ok: false, error: 'No selection' };
+  }
+
+  prepareSelectionForCopy(selection);
+  const settings = await getCurrentSettings();
+  const html = captureSelectionHtml(selection);
+  return convertAndCopyHtml(html, settings, options);
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'copy-selection-with-addon') {
+    copyCurrentSelection().then(sendResponse);
+    return true;
   }
 });
+
+document.addEventListener('copy', (event) => {
+  if (globalThis.CopyLatexBrowserCopyInProgress) {
+    return;
+  }
+
+  if (!shouldHijackCopy(event)) {
+    return;
+  }
+
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || !selection.toString().trim()) {
+    return;
+  }
+
+  try {
+    prepareSelectionForCopy(selection);
+    const html = captureSelectionHtml(selection);
+    const payload = buildClipboardPayload(html, currentSettings);
+    copyClipboardPayload(payload, { clipboardEvent: event });
+  } catch (error) {
+    console.error('[Copy LaTeX] Error hijacking copy:', error);
+  }
+}, true);

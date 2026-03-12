@@ -1,84 +1,66 @@
-// Convert HTML to Markdown and copy to clipboard (main function)
-async function convertAndCopyHtml(html) {
-  try {
-    // console.log('[Copy Latex] Converting HTML to Markdown...');
-
-    const markdown = await convertHtmlToLatexMarkdown(html);
-
-    // console.log('[Copy Latex] Markdown result:', markdown?.substring(0, 200));
-
-    if (!markdown) {
-      return { ok: false, error: 'No content' };
-    }
-
-    const result = await copyToClipboard(markdown);
-    // console.log('[Copy LaTeX] Copy result:', result);
-
-    return result;
-  } catch (error) {
-    console.error('[Copy LaTeX] Error in convertAndCopyHtml:', error);
-    return { ok: false, error: String(error) };
-  }
+function createSelectionContainer(html) {
+  const container = document.createElement('div');
+  // The HTML comes from the user's current DOM selection and is only used for
+  // detached conversion here. Scripts are removed before any clipboard write.
+  container.innerHTML = html;
+  return container;
 }
 
-// Convert HTML to Markdown
-async function convertHtmlToLatexMarkdown(html) {
-  const container = document.createElement('div');
-  // innerHTML usage here is safe: the 'html' parameter comes from trusted sources
-  // (user selection on the page), and we immediately process it in a controlled way
-  // without executing scripts or injecting external code.
-  container.innerHTML = html;
-
-  // 1) We detect all math elements
-  // This is the same logic as in content.js
-  const mathElements = [
+function getMathElements(container) {
+  return [
     ...Array.from(container.querySelectorAll('.katex')),
     ...Array.from(container.querySelectorAll('[data-math]')),
     ...Array.from(container.querySelectorAll('mjx-container')),
     ...Array.from(container.querySelectorAll('.MathJax_Display, .MJXc-display, .MathJax, .mjx-chtml, .MathJax_CHTML, .MathJax_MathML')),
-    ...Array.from(container.querySelectorAll('img.mwe-math, img.mwe-math-fallback-image-inline, img.mwe-math-fallback-image-display')),
+    ...Array.from(container.querySelectorAll('img.mwe-math, img.mwe-math-fallback-image-inline, img.mwe-math-fallback-image-display'))
   ];
+}
 
-  // 2) Replace math elements with LaTeX markers ($..$ or $$...$$)
+function replaceMathWithMarkers(container, settings, mode) {
+  const mathElements = getMathElements(container);
+
   mathElements.forEach((el) => {
     const latex = extractLatexFromElement(el);
-    if (!latex) return;
+    if (!latex) {
+      return;
+    }
 
     const displayMode = getDisplayMode(el);
-    const delimiter = displayMode === 'display' ? '$$' : '$';
+    let replacementText = latex;
 
-    // Create marker that Turndown will preserve
+    if (mode === 'typst-markdown') {
+      replacementText = displayMode === 'display' ? `$$${latex}$$` : `$${latex}$`;
+    } else {
+      const delimiters = CopyLatexSettings.resolveDelimiterPair(settings, displayMode === 'display');
+      replacementText = `${delimiters.start}${latex}${delimiters.end}`;
+    }
+
     const marker = document.createElement('span');
     marker.className = 'latex-marker';
-    marker.textContent = `${delimiter}${latex}${delimiter}`;
     marker.setAttribute('data-latex-mode', displayMode);
-
+    marker.textContent = replacementText;
     el.replaceWith(marker);
   });
+}
 
-  // 2.1) Avoid selecting unicode fallbacks (we already have the LaTeX code)
-  
-  // Don't select any element that may contain math/latex content
-  container.querySelectorAll('script[type*="math/tex"]').forEach(script => script.remove());  
-  container.querySelectorAll('math, .katex-mathml').forEach(mathml => mathml.remove());  
-  container.querySelectorAll('annotation').forEach(ann => ann.remove());  
-  container.querySelectorAll('.katex-html, .katex-fallback, mjx-assistive-mml').forEach(el => el.remove());  
-  container.querySelectorAll('semantics').forEach(el => el.remove());
+function stripMathArtifacts(container) {
+  container.querySelectorAll('script, style').forEach((node) => node.remove());
+  container.querySelectorAll('script[type*="math/tex"]').forEach((node) => node.remove());
+  container.querySelectorAll('math, .katex-mathml, mjx-assistive-mml, annotation, semantics').forEach((node) => node.remove());
+  container.querySelectorAll('.katex-html, .katex-fallback').forEach((node) => node.remove());
+}
 
-  // 3) Convert relative URLs to absolute
-  container.querySelectorAll('a').forEach((link) => {
+function absolutizeUrls(container) {
+  container.querySelectorAll('a[href]').forEach((link) => {
     link.setAttribute('href', link.href);
   });
-  container.querySelectorAll('img').forEach((img) => {
+
+  container.querySelectorAll('img[src]').forEach((img) => {
     img.setAttribute('src', img.src);
   });
+}
 
-  // 4) Convert to Markdown using Turndown
-
-  // TURNDOWN LIBRARY AND PLUGIN ORIGINAL SOURCE:
-  // Library: https://unpkg.com/turndown/dist/turndown.js
-  // Plugin: https://unpkg.com/turndown-plugin-gfm/dist/turndown-plugin-gfm.js
-
+function createTurndownService() {
   const turndownService = new TurndownService({
     headingStyle: 'atx',
     codeBlockStyle: 'fenced'
@@ -86,55 +68,103 @@ async function convertHtmlToLatexMarkdown(html) {
     .remove('script')
     .remove('style');
 
-  // Use GFM plugin for tables support
   turndownService.use(turndownPluginGfm.gfm);
-
-  // Custom rule to preserve LaTeX markers
   turndownService.addRule('latexMarker', {
     filter: (node) => {
-      return node.nodeName === 'SPAN' &&
-             node.classList && node.classList.contains('latex-marker');
+      return node.nodeName === 'SPAN'
+        && node.classList
+        && node.classList.contains('latex-marker');
     },
     replacement: (content, node) => {
-
-      // // Check if it's display mode ($$...$$) or inline ($...$)
-      // const isDisplay = node.getAttribute('data-latex-mode') === 'display';
-      // const latex = node.textContent || '';
-      
-      // // Block equations with blank lines before and after them
-      // return isDisplay ? `\n\n${latex}\n\n` : latex;
-
-      // New (simpler) approach: newlines handled in the markdown output via regex
-      return node.textContent || '';
+      const value = node.textContent || '';
+      return node.getAttribute('data-latex-mode') === 'display'
+        ? `\n\n${value}\n\n`
+        : value;
     }
   });
 
-  // innerHTML usage here is safe: we're reading back the DOM structure we created
-  // above through controlled manipulation. The container only contains elements we
-  // explicitly created or modified, with all scripts removed. This read-only use
-  // preserves the exact HTML structure needed for Turndown conversion while maintaining
-  // inline vs block equation distinctions (getComputedStyle requires rendered DOM).
-  const htmlString = container.innerHTML;
-  
-  let markdown = turndownService.turndown(htmlString);
-
-  // To ensure exactly one blank line around block equations:
-  // First we add spacing around all block equations ($$ as delimiter)
-  markdown = markdown.replace(/(\$\$[\s\S]+?\$\$)/g, '\n\n$1\n\n');
-  // Normalize (convert lines with only whitespaces to empty lines)
-  markdown = markdown.replace(/^[ \t]+$/gm, '');
-  // Then collapse 3 or more newlines to 2 newlines
-  markdown = markdown.replace(/\n{3,}/g, '\n\n');
-  // Then we trim other leading or trailing whitespaces
-  markdown = markdown.trim();
-
-  return markdown;
+  return turndownService;
 }
 
-// Extract LaTeX
+function normalizeMarkdown(markdown) {
+  return markdown
+    .replace(/^[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function extractPlainTextFromContainer(container) {
+  const clone = container.cloneNode(true);
+  const blockSelectors = 'p, div, section, article, aside, header, footer, main, nav, li, ul, ol, blockquote, pre, table, tr, h1, h2, h3, h4, h5, h6';
+
+  clone.querySelectorAll('br').forEach((node) => {
+    node.replaceWith(document.createTextNode('\n'));
+  });
+
+  clone.querySelectorAll('.latex-marker[data-latex-mode="display"]').forEach((node) => {
+    node.prepend(document.createTextNode('\n'));
+    node.append(document.createTextNode('\n'));
+  });
+
+  clone.querySelectorAll(blockSelectors).forEach((node) => {
+    node.append(document.createTextNode('\n'));
+  });
+
+  return clone.textContent
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function convertHtmlToMarkdownText(html, settings) {
+  const container = createSelectionContainer(html);
+  replaceMathWithMarkers(
+    container,
+    settings,
+    settings.outputFormat === 'typst' ? 'typst-markdown' : 'latex'
+  );
+  stripMathArtifacts(container);
+  absolutizeUrls(container);
+
+  const markdown = normalizeMarkdown(createTurndownService().turndown(container.innerHTML));
+
+  if (settings.outputFormat !== 'typst') {
+    return markdown;
+  }
+
+  if (!window.markdown2typst) {
+    throw new Error('markdown2typst library not loaded');
+  }
+
+  return window.markdown2typst(markdown);
+}
+
+function convertHtmlToRichTextPayload(html, settings) {
+  const container = createSelectionContainer(html);
+  replaceMathWithMarkers(container, settings, 'latex');
+  stripMathArtifacts(container);
+  absolutizeUrls(container);
+
+  return {
+    format: 'rich-text',
+    text: extractPlainTextFromContainer(container),
+    html: container.innerHTML.trim()
+  };
+}
+
 function extractLatexFromElement(el) {
-  // Wikipedia
-  if (el.tagName === 'IMG' && el.classList.contains('mwe-math')) {
+  const remembered = el.getAttribute?.('data-copylatex-latex');
+  if (remembered && remembered.trim()) {
+    return remembered.trim();
+  }
+
+  if (
+    el.tagName === 'IMG'
+    && (
+      el.classList.contains('mwe-math')
+      || el.classList.contains('mwe-math-fallback-image-inline')
+      || el.classList.contains('mwe-math-fallback-image-display')
+    )
+  ) {
     const alt = el.getAttribute('alt');
     if (alt) {
       const match = alt.match(/^\{\\displaystyle\s*([\s\S]*?)\}$/);
@@ -142,18 +172,18 @@ function extractLatexFromElement(el) {
     }
   }
 
-  // KaTeX
   if (el.classList.contains('katex')) {
-    const ann = el.querySelector('.katex-mathml annotation[encoding="application/x-tex"]');
-    if (ann && ann.textContent) return ann.textContent.trim();
+    const annotation = el.querySelector('.katex-mathml annotation[encoding="application/x-tex"]');
+    if (annotation && annotation.textContent) {
+      return annotation.textContent.trim();
+    }
 
-    return el.getAttribute('data-tex') ||
-           el.getAttribute('data-latex') ||
-           el.getAttribute('aria-label') ||
-           null;
+    return el.getAttribute('data-tex')
+      || el.getAttribute('data-latex')
+      || el.getAttribute('aria-label')
+      || null;
   }
 
-  // Gemini (data-math attribute)
   if (el.hasAttribute('data-math')) {
     const dataMath = el.getAttribute('data-math');
     if (dataMath && dataMath.trim()) {
@@ -161,27 +191,16 @@ function extractLatexFromElement(el) {
     }
   }
 
-  // MathJax v3/v4
   if (el.tagName === 'MJX-CONTAINER') {
-    // Try global variable set by page script
-    const globalLatex = window.__lastMathJaxV3Latex;
-    if (globalLatex) return globalLatex;
-
-    // Fallback to script element
     const sibling = el.nextElementSibling;
-    if (sibling && sibling.tagName === 'SCRIPT') {
-      const scriptEl = sibling;
-      if (scriptEl.type && scriptEl.type.includes('math/tex')) {
-        return sibling.textContent?.trim() || null;
-      }
+    if (sibling && sibling.tagName === 'SCRIPT' && sibling.type?.includes('math/tex')) {
+      return sibling.textContent?.trim() || null;
     }
   }
 
-  // MathJax v2
   const sibling = el.nextElementSibling;
   if (sibling && sibling.tagName === 'SCRIPT') {
-    const scriptEl = sibling;
-    const type = scriptEl.type;
+    const type = sibling.type;
     if (type === 'math/tex' || type === 'math/tex; mode=display') {
       return sibling.textContent?.trim() || null;
     }
@@ -190,33 +209,28 @@ function extractLatexFromElement(el) {
   return null;
 }
 
-// Determine if math should be inline or display mode
 function getDisplayMode(el) {
-  // Wikipedia
-  if (el.classList.contains('mwe-math-fallback-image-display')) return 'display';
+  if (el.classList.contains('mwe-math-fallback-image-display')) {
+    return 'display';
+  }
 
-  // MathJax v2
   if (el.classList.contains('MathJax_Display') || el.classList.contains('MJXc-display')) {
     return 'display';
   }
 
-  // MathJax v3/v4
   if (el.tagName === 'MJX-CONTAINER' && el.hasAttribute('display')) {
     return 'display';
   }
 
-  // KaTeX: check for display class on parent
   if (el.classList.contains('katex')) {
     if (el.parentElement?.classList.contains('katex-display')) {
       return 'display';
     }
-    if (el.parentElement) {
-      const style = window.getComputedStyle(el.parentElement);
-      if (style.display === 'block') return 'display';
+    if (el.parentElement && window.getComputedStyle(el.parentElement).display === 'block') {
+      return 'display';
     }
   }
 
-  // Gemini: check if div (block equation) or span (inline equation)
   if (el.hasAttribute('data-math')) {
     return el.tagName === 'DIV' ? 'display' : 'inline';
   }
@@ -224,76 +238,168 @@ function getDisplayMode(el) {
   return 'inline';
 }
 
-// Copy text to clipboard with fallback methods
-async function copyToClipboard(text) {
+function buildClipboardPayload(html, settings) {
+  const mergedSettings = CopyLatexSettings.merge(settings);
+
+  if (mergedSettings.outputFormat === 'latex' && mergedSettings.selectionCopyMode === 'rich-text') {
+    return convertHtmlToRichTextPayload(html, mergedSettings);
+  }
+
+  return {
+    format: mergedSettings.outputFormat === 'typst' ? 'typst' : 'markdown',
+    text: convertHtmlToMarkdownText(html, mergedSettings)
+  };
+}
+
+async function copyTextToClipboard(text) {
   class KnownFailureError extends Error {}
 
-  // Method 1: Try navigator.clipboard API
-  const useClipboardAPI = async (t) => {
-    let ret;
+  const useClipboardApi = async (value) => {
+    let permission;
     try {
-      ret = await navigator.permissions.query({
+      permission = await navigator.permissions.query({
         name: 'clipboard-write',
-        allowWithoutGesture: true,
+        allowWithoutGesture: true
       });
-    } catch (e) {
-      if (e instanceof TypeError) {
-        // Firefox: clipboard-write is not queryable, just try to write
-        await navigator.clipboard.writeText(t);
+    } catch (error) {
+      if (error instanceof TypeError) {
+        await navigator.clipboard.writeText(value);
         return true;
       }
-      throw e;
+      throw error;
     }
 
-    if (ret && ret.state === 'granted') {
-      await navigator.clipboard.writeText(t);
+    if (permission && permission.state === 'granted') {
+      await navigator.clipboard.writeText(value);
       return true;
     }
+
     throw new KnownFailureError('no permission to call navigator.clipboard API');
   };
 
-  // Method 2: Fallback to textarea + execCommand
-  const useOnPageTextarea = async (t) => {
+  const useTextareaFallback = async (value) => {
     const textBox = document.createElement('textarea');
+    textBox.value = value;
+    textBox.setAttribute('readonly', '');
+    textBox.style.position = 'fixed';
+    textBox.style.left = '-9999px';
+    textBox.style.top = '0';
     document.body.appendChild(textBox);
+
     try {
-      textBox.value = t;
       textBox.select();
-      const result = document.execCommand('Copy');
-      if (result) {
-        return Promise.resolve(true);
+      const result = document.execCommand('copy');
+      if (!result) {
+        throw new KnownFailureError('execCommand returned false');
       }
-      return Promise.reject(new KnownFailureError('execCommand returned false'));
-    } catch (e) {
-      return Promise.reject(e);
+      return true;
     } finally {
-      if (document.body.contains(textBox)) {
-        document.body.removeChild(textBox);
-      }
+      textBox.remove();
     }
   };
 
-  // Try clipboard API first
   try {
-    await useClipboardAPI(text);
+    await useClipboardApi(text);
     return { ok: true, method: 'navigator_api' };
   } catch (error) {
-    if (error instanceof KnownFailureError) {
-      console.debug('[Copy LaTeX]', error);
-      // Continue to fallback
-    } else {
-      const err = error;
-      return { ok: false, error: `${err.name} ${err.message}`, method: 'navigator_api' };
+    if (!(error instanceof KnownFailureError)) {
+      return { ok: false, error: `${error.name} ${error.message}`, method: 'navigator_api' };
     }
   }
 
-  // Try textarea fallback
   try {
-    await useOnPageTextarea(text);
+    await useTextareaFallback(text);
     return { ok: true, method: 'textarea' };
   } catch (error) {
-    const err = error;
-    return { ok: false, error: `${err.name} ${err.message}`, method: 'textarea' };
+    return { ok: false, error: `${error.name} ${error.message}`, method: 'textarea' };
   }
 }
 
+async function copyHtmlWithExecCommand(html) {
+  const container = document.createElement('div');
+  container.contentEditable = 'true';
+  container.setAttribute('aria-hidden', 'true');
+  container.style.position = 'fixed';
+  container.style.left = '-9999px';
+  container.style.top = '0';
+  container.style.opacity = '0';
+  container.innerHTML = html;
+  document.body.appendChild(container);
+
+  const selection = window.getSelection();
+  const previousRanges = [];
+
+  if (selection) {
+    for (let index = 0; index < selection.rangeCount; index += 1) {
+      previousRanges.push(selection.getRangeAt(index).cloneRange());
+    }
+    selection.removeAllRanges();
+  }
+
+  const range = document.createRange();
+  range.selectNodeContents(container);
+  selection?.addRange(range);
+
+  try {
+    globalThis.CopyLatexBrowserCopyInProgress = true;
+    return document.execCommand('copy');
+  } finally {
+    globalThis.CopyLatexBrowserCopyInProgress = false;
+    selection?.removeAllRanges();
+    previousRanges.forEach((previousRange) => selection?.addRange(previousRange));
+    container.remove();
+  }
+}
+
+async function copyClipboardPayload(payload, options = {}) {
+  const clipboardEvent = options.clipboardEvent;
+  if (payload.html) {
+    if (clipboardEvent) {
+      clipboardEvent.preventDefault();
+      clipboardEvent.stopPropagation();
+    }
+
+    const copied = await copyHtmlWithExecCommand(payload.html);
+    if (copied) {
+      return { ok: true, method: 'exec_command_html', format: payload.format };
+    }
+
+    if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/plain': new Blob([payload.text || ''], { type: 'text/plain' }),
+            'text/html': new Blob([payload.html], { type: 'text/html' })
+          })
+        ]);
+        return { ok: true, method: 'navigator_item', format: payload.format };
+      } catch (error) {
+        console.debug('[Copy LaTeX] Rich clipboard API failed:', error);
+      }
+    }
+  }
+
+  if (clipboardEvent?.clipboardData) {
+    clipboardEvent.preventDefault();
+    clipboardEvent.stopPropagation();
+    clipboardEvent.clipboardData.setData('text/plain', payload.text || '');
+    return { ok: true, method: 'clipboard_event', format: payload.format };
+  }
+
+  const textResult = await copyTextToClipboard(payload.text || '');
+  return { ...textResult, format: payload.format };
+}
+
+async function convertAndCopyHtml(html, settings = CopyLatexSettings.defaults, options = {}) {
+  try {
+    const payload = buildClipboardPayload(html, settings);
+    if (!payload.text && !payload.html) {
+      return { ok: false, error: 'No content' };
+    }
+
+    return await copyClipboardPayload(payload, options);
+  } catch (error) {
+    console.error('[Copy LaTeX] Error in convertAndCopyHtml:', error);
+    return { ok: false, error: String(error) };
+  }
+}

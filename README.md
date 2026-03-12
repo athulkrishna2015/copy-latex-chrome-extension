@@ -2,15 +2,22 @@
 
 A Chrome and Firefox extension that lets you quickly copy LaTeX code (KaTeX or MathJax) from equations displayed on websites like ChatGPT, DeepSeek, or any blog using mathematical equations. It works simply by hovering over an equation and clicking to copy the LaTeX expression.
 
-Version 1.1: Now it also works with with Wikipedia and Wikiwand images.
+## Changelog
 
-Version 1.2: Now it also works for MathJax v3 (when there is no LaTeX code in the HTML) via API.
+### March 12, 2026 - v1.6.0
+- Added a popup settings panel for copy behavior and output format.
+- Added selection copy modes for Markdown or rich text (HTML) with LaTeX substitutions.
+- Added inline and display delimiter switching, including custom delimiter pairs.
+- Added options to disable the floating copy button, hijack normal copy when math is selected, and enable an extension copy shortcut.
+- Improved MathJax v3/v4 selection copy so untouched formulas can still be copied as LaTeX.
+- Improved single-formula copy so delimiter settings apply there too.
 
-Version 1.3: Dark mode enabled and replaced check emoji with SVG icon.
-
-Version 1.4: New feature! Select text (that includes formulas), right click on it and a `Copy as Markdown (with LaTeX)` option will appear.
-
-Version 1.5: Typst support!!
+### Previous release notes
+- v1.5: Typst support.
+- v1.4: New feature. Select text that includes formulas, right click it, and a `Copy as Markdown (with LaTeX)` option appears.
+- v1.3: Dark mode enabled and the check emoji was replaced with an SVG icon.
+- v1.2: Added MathJax v3 support via the MathJax API when the generated HTML does not contain source LaTeX.
+- v1.1: Added support for Wikipedia and Wikiwand math images.
 
 
 ## Example GIFs
@@ -146,5 +153,5 @@ If you have an idea for a new feature open an issue and let me know! Also if you
 - [X] **Text selection to Markdown**: Select some text that includes equations, right click and a new option "[Extension Icon] Copy as Markdown" appears.
 - [X] **Typst support**: 
   Pop up with a toggle between LaTeX and Typst
-- [ ] **Custom  delimiters**: 
-Chose between no delimiters (default), `$` and `$$`, `\(` and `\[`, always `$`, or always `$$`.
+- [X] **Custom delimiters**:
+  Choose between no delimiters, `$...$`, `$$...$$`, `\(...\)`, `\[...\]`, or a custom pair for inline and display math.

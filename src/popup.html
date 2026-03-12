@@ -6,15 +6,158 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <h3>LaTeX or Typst?</h3>
-  <div class="toggle-container">
-    <span class="format-label">LaTeX</span>
-    <label class="toggle-switch">
-      <input type="checkbox" id="formatToggle">
-      <span class="slider"></span>
-    </label>
-    <span class="format-label">Typst</span>
-  </div>
+  <main class="panel">
+    <header class="hero">
+      <p class="eyebrow">Copy LaTeX</p>
+      <h1>Copy behavior</h1>
+      <p class="hero-copy">Choose how formulas and selected content are copied.</p>
+    </header>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Math Output</h2>
+        <p>Single-equation copy and selection conversion target.</p>
+      </div>
+      <div class="segmented-control">
+        <label class="choice-pill">
+          <input type="radio" name="outputFormat" value="latex">
+          <span>LaTeX</span>
+        </label>
+        <label class="choice-pill">
+          <input type="radio" name="outputFormat" value="typst">
+          <span>Typst</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="section" id="selectionModeSection">
+      <div class="section-header">
+        <h2>Selection Copy</h2>
+        <p>Used by the right-click entry, copy hijack, and custom shortcut.</p>
+      </div>
+      <div class="segmented-control">
+        <label class="choice-pill">
+          <input type="radio" name="selectionCopyMode" value="markdown">
+          <span>Markdown</span>
+        </label>
+        <label class="choice-pill">
+          <input type="radio" name="selectionCopyMode" value="rich-text">
+          <span>Rich text (HTML)</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="section is-muted" id="typstSelectionNotice" hidden>
+      <div class="section-header">
+        <h2>Selection Copy</h2>
+        <p>Typst selection copy stays plain text so it pastes cleanly into Typst editors.</p>
+      </div>
+    </section>
+
+    <section class="section" id="delimiterSection">
+      <div class="section-header">
+        <h2>LaTeX Delimiters</h2>
+        <p>Applied to single-formula copy and LaTeX selection copy.</p>
+      </div>
+
+      <div class="field-grid">
+        <label class="field">
+          <span>Inline math</span>
+          <select id="inlineDelimiterType">
+            <option value="single">Dollar signs `$...$`</option>
+            <option value="paren">Parentheses `\(...\)`</option>
+            <option value="double">Double dollars `$$...$$`</option>
+            <option value="none">No delimiters</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Display math</span>
+          <select id="displayDelimiterType">
+            <option value="double">Double dollars `$$...$$`</option>
+            <option value="brackets">Brackets `\[...\]`</option>
+            <option value="single">Dollar signs `$...$`</option>
+            <option value="none">No delimiters</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="custom-delimiter-grid" id="inlineCustomGroup" hidden>
+        <label class="field">
+          <span>Inline start</span>
+          <input type="text" id="inlineCustomStart" maxlength="20" placeholder="$">
+        </label>
+        <label class="field">
+          <span>Inline end</span>
+          <input type="text" id="inlineCustomEnd" maxlength="20" placeholder="$">
+        </label>
+      </div>
+
+      <div class="custom-delimiter-grid" id="displayCustomGroup" hidden>
+        <label class="field">
+          <span>Display start</span>
+          <input type="text" id="displayCustomStart" maxlength="20" placeholder="$$">
+        </label>
+        <label class="field">
+          <span>Display end</span>
+          <input type="text" id="displayCustomEnd" maxlength="20" placeholder="$$">
+        </label>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Features</h2>
+        <p>Turn behavior on or off without reinstalling the extension.</p>
+      </div>
+
+      <div class="toggle-row">
+        <div>
+          <strong>Floating copy button</strong>
+          <p>Show the hover button above detected formulas.</p>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="enableFloatingButton">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div>
+          <strong>Hijack normal copy</strong>
+          <p>Replace regular copy with the extension’s selection copy mode.</p>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="hijackNormalCopy">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div>
+          <strong>Custom copy shortcut</strong>
+          <p>Allow the extension command to copy the current selection on demand.</p>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="enableCustomCopyShortcut">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="shortcut-card">
+        <div>
+          <strong>Shortcut</strong>
+          <p id="shortcutHint">Not assigned</p>
+        </div>
+        <button type="button" id="openShortcuts">Open shortcut settings</button>
+      </div>
+    </section>
+
+    <p class="status" id="status" aria-live="polite"></p>
+  </main>
+  <script src="settings.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

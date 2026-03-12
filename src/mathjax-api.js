@@ -27,10 +27,39 @@
     return null;
   }
 
+  function annotateContainer(mjxContainer) {
+    const latex = getLatexForContainer(mjxContainer);
+    if (!latex) {
+      return null;
+    }
+
+    mjxContainer.setAttribute('data-copylatex-latex', latex);
+    return latex;
+  }
+
+  function annotateAllMathContainers() {
+    if (!(MathJax && MathJax.startup && MathJax.startup.document && MathJax.startup.document.math)) {
+      return;
+    }
+
+    let current = MathJax.startup.document.math.list;
+    var seen = new Set();
+    while (current && current.data && !seen.has(current)) {
+      seen.add(current);
+      const mathItem = current.data;
+      if (mathItem.typesetRoot && mathItem.math && typeof mathItem.math === 'string') {
+        mathItem.typesetRoot.setAttribute('data-copylatex-latex', mathItem.math.trim());
+      }
+      current = current.next;
+    }
+  }
+
+  annotateAllMathContainers();
+
   document.addEventListener('mouseover', function(e) {
     const mjx = e.target.closest('mjx-container');
     if (mjx) {
-      const latex = getLatexForContainer(mjx);
+      const latex = annotateContainer(mjx);
       if (latex) {
         window.postMessage({ type: 'CopyLaTeX_MathJaxV3', latex, mjxId: mjx.getAttribute('ctxtmenu_counter') }, '*');
       } 
@@ -40,10 +69,21 @@
   document.addEventListener('click', function(e) {
     const mjx = e.target.closest('mjx-container');
     if (mjx) {
-      const latex = getLatexForContainer(mjx);
+      const latex = annotateContainer(mjx);
       if (latex) {
         window.postMessage({ type: 'CopyLaTeX_MathJaxV3', latex, mjxId: mjx.getAttribute('ctxtmenu_counter') }, '*');
       }
     }
   }, true);
+
+  var refreshTimer = null;
+  const observer = new MutationObserver(function() {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(annotateAllMathContainers, 100);
+  });
+
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
 })();
