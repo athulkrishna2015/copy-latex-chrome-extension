@@ -137,8 +137,8 @@ You can automate the creation of a production-ready ZIP file for both Chrome and
 
 ## Links
 - Chrome Add-on page: [https://chromewebstore.google.com/detail/copy-latex-katex-mathjax/lmhdbdfaadjfjclobmodomehekpjpkgn](https://chromewebstore.google.com/detail/copy-latex-katex-mathjax/lmhdbdfaadjfjclobmodomehekpjpkgn)
-- GitHub Repo: [https://github.com/Mapaor/copy-latex-chrome-extension](https://github.com/Mapaor/copy-latex-chrome-extension)
-- README as a website: [https://mapaor.github.io/copy-latex-chrome-extension/](https://mapaor.github.io/copy-latex-chrome-extension/)
+- GitHub Repo: [https://github.com/athulkrishna2015/copy-latex-extension](https://github.com/athulkrishna2015/copy-latex-extension)
+- README as a website: [https://athulkrishna2015.github.io/copy-latex-extension/](https://athulkrishna2015.github.io/copy-latex-extension/)
 
 ## Firefox version
 You can build the Firefox version directly from this repository using the `./build-firefox.sh` script described above.

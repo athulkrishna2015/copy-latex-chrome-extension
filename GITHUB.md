@@ -6,8 +6,8 @@ This document outlines the workflow for managing the **Copy LaTeX** extension on
 
 1.  **Clone the Repository**:
     ```bash
-    git clone https://github.com/athulkrishna2015/copy-latex-chrome-extension.git
-    cd copy-latex-chrome-extension
+    git clone https://github.com/athulkrishna2015/copy-latex-extension.git
+    cd copy-latex-extension
     ```
 
 2.  **Feature Branches**:
