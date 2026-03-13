@@ -135,24 +135,10 @@ You can automate the creation of a production-ready ZIP file for both Chrome and
    ```
 2. The output will be `copy-latex-firefox.zip`. This version includes the necessary `browser_specific_settings` in the `manifest.json`.
 
-## Links
-- Chrome Add-on page: [https://chromewebstore.google.com/detail/copy-latex-katex-mathjax/lmhdbdfaadjfjclobmodomehekpjpkgn](https://chromewebstore.google.com/detail/copy-latex-katex-mathjax/lmhdbdfaadjfjclobmodomehekpjpkgn)
-- GitHub Repo: [https://github.com/athulkrishna2015/copy-latex-extension](https://github.com/athulkrishna2015/copy-latex-extension)
-- README as a website: [https://athulkrishna2015.github.io/copy-latex-extension/](https://athulkrishna2015.github.io/copy-latex-extension/)
-
-## Firefox version
-You can build the Firefox version directly from this repository using the `./build-firefox.sh` script described above.
-
-Alternatively, there is a dedicated Firefox version repository: [https://github.com/Mapaor/copy-latex-firefox-extension](https://github.com/Mapaor/copy-latex-firefox-extension) 
-
-You can also use this extension in Brave and Arc (they support Chrome extensions by default). 
-
-I also plan to adapt this code for Edge and Opera and publish in their respective places. 
-
-A Safari version is not planned because publishing in Safari is ridiculously expensive.
-
 
 ## Acknowledgements
+
+This project builds on the original CopyLaTeX extension created by [Mapaor](https://github.com/Mapaor), who authored and published the initial version of the extension.
 
 Credits to @leander-ow for his dark mode contribution and to  @ashigirl96 for suggesting and providing a working code implementation for the "Copy as Markdown" feature. 
 
