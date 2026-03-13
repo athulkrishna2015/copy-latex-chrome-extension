@@ -117,13 +117,33 @@ This is done in `chrome://extensions` in the extension 'Details'.
 1. Download the `src` directory (using for example [download-directory.github.io](https://download-directory.github.io/)). Rename it if you want.
 2. Then go to `chrome://extensions` (as if it were an URL) and in the top left click the 'Load unpacked' button and select the `src` (or whatever is named now) folder.
 
+## Building and Packaging
+
+You can automate the creation of a production-ready ZIP file for both Chrome and Firefox using the provided build scripts. These scripts will create a clean `dist` directory, apply browser-specific tweaks (like updating the settings URL), and package the extension.
+
+### For Chrome:
+1. Run the script:
+   ```bash
+   ./build-chrome.sh
+   ```
+2. The output will be `copy-latex-chrome.zip`.
+
+### For Firefox:
+1. Run the script:
+   ```bash
+   ./build-firefox.sh
+   ```
+2. The output will be `copy-latex-firefox.zip`. This version includes the necessary `browser_specific_settings` in the `manifest.json`.
+
 ## Links
 - Chrome Add-on page: [https://chromewebstore.google.com/detail/copy-latex-katex-mathjax/lmhdbdfaadjfjclobmodomehekpjpkgn](https://chromewebstore.google.com/detail/copy-latex-katex-mathjax/lmhdbdfaadjfjclobmodomehekpjpkgn)
 - GitHub Repo: [https://github.com/Mapaor/copy-latex-chrome-extension](https://github.com/Mapaor/copy-latex-chrome-extension)
 - README as a website: [https://mapaor.github.io/copy-latex-chrome-extension/](https://mapaor.github.io/copy-latex-chrome-extension/)
 
 ## Firefox version
-There is also a Firefox version of this extension: [https://github.com/Mapaor/copy-latex-fireofx-extension](https://github.com/Mapaor/copy-latex-firefox-extension) 
+You can build the Firefox version directly from this repository using the `./build-firefox.sh` script described above.
+
+Alternatively, there is a dedicated Firefox version repository: [https://github.com/Mapaor/copy-latex-firefox-extension](https://github.com/Mapaor/copy-latex-firefox-extension) 
 
 You can also use this extension in Brave and Arc (they support Chrome extensions by default). 
 
