@@ -4,6 +4,11 @@ A Chrome and Firefox extension that lets you quickly copy LaTeX code (KaTeX or M
 
 ## Changelog
 
+### March 17, 2026 - v1.6.1
+- Improved selection copy reliability: Ensures math delimiters are correctly applied even when only an equation is selected (without surrounding text).
+- Fixed KaTeX display math detection during selection copy.
+- Better support for Wikipedia math images in selection copy.
+
 ### March 12, 2026 - v1.6.0
 - Added a popup settings panel for copy behavior and output format.
 - Added selection copy modes for Markdown or rich text (HTML) with LaTeX substitutions.

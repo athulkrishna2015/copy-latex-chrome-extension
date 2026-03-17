@@ -105,6 +105,7 @@ const check_svg = '<svg class="check-icon" xmlns="http://www.w3.org/2000/svg" wi
 const selectionMathSelector = [
   '.katex',
   '[data-math]',
+  '[data-copylatex-latex]',
   'mjx-container',
   '.MathJax_Display',
   '.MJXc-display',
@@ -322,7 +323,11 @@ function isDisplayMathTarget(target) {
   }
 
   if (target.classList.contains('katex')) {
-    return target.parentElement?.classList.contains('katex-display') || false;
+    if (target.parentElement?.classList.contains('katex-display')) {
+      return true;
+    }
+    const display = window.getComputedStyle(target.parentElement || target).display;
+    return display === 'block' || display === 'flex';
   }
 
   if (target.hasAttribute('data-math')) {
@@ -523,7 +528,27 @@ function captureSelectionHtml(selection) {
   const container = document.createElement('div');
 
   for (let index = 0; index < selection.rangeCount; index += 1) {
-    container.appendChild(selection.getRangeAt(index).cloneContents());
+    const range = selection.getRangeAt(index);
+    let contents = range.cloneContents();
+
+    // If the selection is entirely within a math element, clone the whole math element
+    // to ensure classes and data attributes are preserved for the converter.
+    let root = range.commonAncestorContainer;
+    if (root.nodeType !== Node.ELEMENT_NODE) {
+      root = root.parentElement;
+    }
+
+    const mathEl = normalizeSelectionMathElement(root);
+    if (mathEl && mathEl.contains(range.startContainer) && mathEl.contains(range.endContainer)) {
+      // If the cloned fragment doesn't already contain a math element at its root
+      if (!contents.querySelector(selectionMathSelector) &&
+          !(contents.children.length === 1 && contents.children[0].matches?.(selectionMathSelector))) {
+        contents = document.createDocumentFragment();
+        contents.appendChild(mathEl.cloneNode(true));
+      }
+    }
+
+    container.appendChild(contents);
   }
 
   return container.innerHTML;
@@ -624,19 +649,27 @@ function annotateLiveMathElement(element) {
     return;
   }
 
-  if (element.tagName === 'MJX-CONTAINER') {
-    const latex = findMathJaxV3Tex(element);
-    if (latex) {
-      element.setAttribute('data-copylatex-latex', latex);
-    }
-    return;
+  const isDisplay = isDisplayMathTarget(element);
+  if (isDisplay) {
+    element.setAttribute('data-copylatex-display', 'true');
   }
 
-  if (element.matches('.MathJax_Display, .MJXc-display, .MathJax, .mjx-chtml, .MathJax_CHTML, .MathJax_MathML')) {
-    const latex = findMathJaxTex(element);
-    if (latex) {
-      element.setAttribute('data-copylatex-latex', latex);
-    }
+  // Set LaTeX attribute for all types to ensure it's preserved in clones
+  let latex = null;
+  if (element.tagName === 'MJX-CONTAINER') {
+    latex = findMathJaxV3Tex(element);
+  } else if (element.matches('.MathJax_Display, .MJXc-display, .MathJax, .mjx-chtml, .MathJax_CHTML, .MathJax_MathML')) {
+    latex = findMathJaxTex(element);
+  } else if (element.classList.contains('katex')) {
+    latex = findAnnotationTex(element);
+  } else if (element.hasAttribute('data-math')) {
+    latex = element.getAttribute('data-math');
+  } else if (isWikipedia()) {
+    latex = findWikipediaTex(element);
+  }
+
+  if (latex && latex.trim()) {
+    element.setAttribute('data-copylatex-latex', latex.trim());
   }
 }
 

@@ -10,6 +10,7 @@ function getMathElements(container) {
   return [
     ...Array.from(container.querySelectorAll('.katex')),
     ...Array.from(container.querySelectorAll('[data-math]')),
+    ...Array.from(container.querySelectorAll('[data-copylatex-latex]')),
     ...Array.from(container.querySelectorAll('mjx-container')),
     ...Array.from(container.querySelectorAll('.MathJax_Display, .MJXc-display, .MathJax, .mjx-chtml, .MathJax_CHTML, .MathJax_MathML')),
     ...Array.from(container.querySelectorAll('img.mwe-math, img.mwe-math-fallback-image-inline, img.mwe-math-fallback-image-display'))
@@ -210,6 +211,10 @@ function extractLatexFromElement(el) {
 }
 
 function getDisplayMode(el) {
+  if (el.getAttribute?.('data-copylatex-display') === 'true') {
+    return 'display';
+  }
+
   if (el.classList.contains('mwe-math-fallback-image-display')) {
     return 'display';
   }
