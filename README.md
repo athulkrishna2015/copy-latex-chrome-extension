@@ -9,6 +9,8 @@ A Chrome and Firefox extension that lets you quickly copy LaTeX code (KaTeX or M
 - Fixed KaTeX display math detection during selection copy.
 - Better support for Wikipedia math images in selection copy.
 
+> **💡 Usage Tip:** When copying a single equation, it is recommended to use the floating "Click to copy" button. If the floating button is disabled, ensure you select the complete equation; using the mouse to select from top to bottom often helps ensure the entire math container is captured.
+
 ### March 12, 2026 - v1.6.0
 - Added a popup settings panel for copy behavior and output format.
 - Added selection copy modes for Markdown or rich text (HTML) with LaTeX substitutions.
